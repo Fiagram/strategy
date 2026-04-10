@@ -8,10 +8,10 @@ from confluent_kafka import Producer
 logger = logging.getLogger(__name__)
 
 
-class TorchProducer:
+class KafkaProducer:
     def __init__(
         self,
-        signal_queue: Queue,
+        signal_queue: Queue[int],
         bootstrap_servers: str = "localhost:9092",
         topic: str = "torch",
     ):
@@ -30,7 +30,7 @@ class TorchProducer:
             "acks": "all",
             "retries": 3,
         })
-        self._thread = threading.Thread(target=self._run, name="kafka-signal-producer", daemon=True)
+        self._thread = threading.Thread(target=self._run, name="kafka-producer", daemon=True)
         self._thread.start()
         logger.info("Kafka producer started (servers=%s, topic=%s)", self._bootstrap_servers, self._topic)
 

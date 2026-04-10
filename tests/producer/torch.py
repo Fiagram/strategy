@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch, call
 
 import pytest
 
-from src.producer.torch import TorchProducer
+from producer.kafka import TorchProducer
 
 
 @pytest.fixture

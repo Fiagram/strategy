@@ -1,1 +1,1 @@
-from .torch import TorchProducer
+from .kafka import KafkaProducer
