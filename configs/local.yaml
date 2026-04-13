@@ -2,5 +2,8 @@ grpc:
   port: 13000
 
 mongo_client:
-  uri: "mongodb://localhost:27017"
-  database: "fiagram"
+  uri: mongodb://localhost:27017
+  database: fiagram
+
+kafka_producer:
+  bootstrap_servers: localhost:9092

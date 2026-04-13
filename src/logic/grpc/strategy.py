@@ -1,8 +1,7 @@
 import grpc
 from google.protobuf.timestamp_pb2 import Timestamp
-
 from generated.grpc import strategy_pb2, strategy_pb2_grpc
-from repository.alert_repository import AlertRepository
+from dataaccess.mongo.alert_repository import AlertRepository
 
 
 class StrategyServicer(strategy_pb2_grpc.StrategyServicer):

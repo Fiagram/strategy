@@ -1,22 +1,18 @@
-import json
 import logging
 import threading
 from queue import Queue, Empty
-
 from confluent_kafka import Producer
+from handlers.producer.models import ProducerSignalAbstract
 
 logger = logging.getLogger(__name__)
-
 
 class KafkaProducer:
     def __init__(
         self,
-        signal_queue: Queue[int],
+        signal_queue: Queue[ProducerSignalAbstract],
         bootstrap_servers: str = "localhost:9092",
-        topic: str = "torch",
     ):
         self._queue = signal_queue
-        self._topic = topic
         self._bootstrap_servers = bootstrap_servers
         self._producer: Producer | None = None
         self._thread: threading.Thread | None = None
@@ -32,7 +28,7 @@ class KafkaProducer:
         })
         self._thread = threading.Thread(target=self._run, name="kafka-producer", daemon=True)
         self._thread.start()
-        logger.info("Kafka producer started (servers=%s, topic=%s)", self._bootstrap_servers, self._topic)
+        logger.info("Kafka producer started at %s", self._bootstrap_servers)
 
     def stop(self):
         """Signal the producer thread to stop and wait for it to finish."""
@@ -58,7 +54,6 @@ class KafkaProducer:
     def _run(self):
         """Main loop: drain the queue and publish to Kafka."""
         while not self._stop_event.is_set():
-            # Service delivery callbacks from previous produce() calls
             self._producer.poll(0)
 
             try:
@@ -67,21 +62,18 @@ class KafkaProducer:
                 continue
 
             try:
-                symbol = signal.get("symbol", "unknown")
+                payload = signal.payload().encode("utf-8")
                 self._producer.produce(
-                    self._topic,
-                    key=symbol.encode("utf-8") if symbol else None,
-                    value=json.dumps(signal).encode("utf-8"),
+                    signal.topic(),
+                    value=payload,
                     callback=self._on_delivery,
                 )
             except BufferError:
                 logger.warning("Producer queue full, flushing...")
                 self._producer.flush(timeout=5)
-                # Retry after flush
                 self._producer.produce(
-                    self._topic,
-                    key=symbol.encode("utf-8") if symbol else None,
-                    value=json.dumps(signal).encode("utf-8"),
+                    signal.topic(),
+                    value=payload,
                     callback=self._on_delivery,
                 )
             except Exception:

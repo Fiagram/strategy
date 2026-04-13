@@ -1,12 +1,12 @@
-import time
 from datetime import datetime, timezone
 
 from pymongo import MongoClient
 from pymongo.collection import Collection
+from pymongo.errors import PyMongoError
 
 
 class AlertRepository:
-    def __init__(self, mongo_uri: str = "mongodb://localhost:27017", db_name: str = "fiagram"):
+    def __init__(self, mongo_uri: str, db_name: str):
         self._client = MongoClient(mongo_uri)
         self._db = self._client[db_name]
         self._collection: Collection = self._db["alerts"]
@@ -22,7 +22,7 @@ class AlertRepository:
         )
         return result["seq"]
 
-    def create(self, alert_data: dict) -> dict:
+    def create(self, alert_data: dict) -> dict | None:
         alert_id = self._next_id()
         now = datetime.now(timezone.utc)
         doc = {
@@ -38,7 +38,10 @@ class AlertRepository:
             "created_at": now,
             "updated_at": now,
         }
-        self._collection.insert_one(doc)
+        try:
+            self._collection.insert_one(doc)
+        except PyMongoError:
+            return None
         return self._doc_to_dict(doc)
 
     def get_by_id(self, of_account_id: int, alert_id: int) -> dict | None:
@@ -46,6 +49,11 @@ class AlertRepository:
         if doc is None:
             return None
         return self._doc_to_dict(doc)
+
+    # TODO: Check logic of this method to get all alerts from database
+    def get_all(self) -> list[dict]:
+        cursor = self._collection.find()
+        return [self._doc_to_dict(doc) for doc in cursor]
 
     def get_list(self, of_account_id: int, limit: int = 50, offset: int = 0) -> list[dict]:
         cursor = (

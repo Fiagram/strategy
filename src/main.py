@@ -1,62 +1,52 @@
-import argparse
-import logging
 import sys
-from concurrent import futures
+import logging
+import signal
+import threading
 
-import grpc
-import yaml
+from queue import Queue
 
-from generated.grpc import strategy_pb2_grpc
-from repository.alert_repository import AlertRepository
-from server.strategy_servicer import StrategyServicer
+from utils.config_reader import load_yaml_config, parse_args
 
-DEFAULT_CONFIG_PATH = "configs/local.yaml"
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Fiagram Strategy gRPC Server")
-    parser.add_argument(
-        "--config",
-        default=DEFAULT_CONFIG_PATH,
-        help=f"Path to YAML config file (default: {DEFAULT_CONFIG_PATH})",
-    )
-    return parser.parse_args()
-
-
-def load_config(path: str) -> dict:
-    with open(path, "r") as f:
-        return yaml.safe_load(f)
-
+from handlers.producer.models import ProducerSignalAbstract
+from handlers.producer.kafka import KafkaProducer
+from handlers.grpc.server import GrpcServer
 
 def serve(config_path: str):
+    # Set up logging
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
         stream=sys.stdout,
     )
     logger = logging.getLogger(__name__)
-
-    cfg = load_config(config_path)
+    cfg = load_yaml_config(config_path)
     logger.info("Loaded config from %s", config_path)
 
-    repo = AlertRepository(
-        mongo_uri=cfg["mongo_client"]["uri"],
-        db_name=cfg["mongo_client"]["database"],
+    # Signals queue and Kafka producer setup and starting
+    producerQueue: Queue[ProducerSignalAbstract] = Queue()
+    kafkaProducer = KafkaProducer(
+        signal_queue=producerQueue,
+        bootstrap_servers=cfg["kafka_producer"]["bootstrap_servers"],
     )
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
-    strategy_pb2_grpc.add_StrategyServicer_to_server(StrategyServicer(repo), server)
+    kafkaProducer.start()
 
-    listen_addr = f"[::]:{cfg['grpc']['port']}"
-    server.add_insecure_port(listen_addr)
-    server.start()
-    logger.info("gRPC server started on %s", listen_addr)
+    # gRPC server setup and starting
+    grpcServer = GrpcServer(
+        mongo_uri=cfg["mongo_client"]["uri"],
+        mongo_db=cfg["mongo_client"]["database"],
+        grpc_address=f"[::]:{cfg['grpc']['port']}",
+    )  
+    grpcServer.start()
 
-    try:
-        server.wait_for_termination()
-    except KeyboardInterrupt:
-        logger.info("Shutting down gRPC server...")
-        server.stop(grace=5)
-
+    # Block main thread until interrupted
+    shutdown_event = threading.Event()
+    signal.signal(signal.SIGTERM, lambda *_: shutdown_event.set())
+    signal.signal(signal.SIGINT, lambda *_: shutdown_event.set())
+    shutdown_event.wait()
+    # Stop servers gracefully
+    logger.info("Received shutdown signal, stopping servers...")
+    grpcServer.stop()
+    kafkaProducer.stop()
 
 def main():
     args = parse_args()
