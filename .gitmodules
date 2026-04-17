@@ -1,3 +1,0 @@
-[submodule "3rdparty/dnse"]
-	path = 3rdparty/dnse
-	url = https://github.com/dnse-tech/openapi-sdk.git
