@@ -1,0 +1,3 @@
+[submodule "brokers/dnse"]
+	path = brokers/dnse
+	url = https://github.com/dnse-tech/openapi-sdk.git
